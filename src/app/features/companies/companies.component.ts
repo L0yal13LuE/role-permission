@@ -267,7 +267,7 @@ export class CompaniesComponent implements OnInit {
     if (!mode.default_role_id) return;
     const co = this.selectedCompany()!;
     const app = this.selectedCompanyApp()!;
-    this.api.updateDefaultRole(co.company_id, app.application_id, { role_id: mode.default_role_id }).subscribe({
+    this.api.updateDefaultRole(co.company_id, app.application_id, mode.mode, { role_id: mode.default_role_id }).subscribe({
       next: () => this.toast.success('บันทึก Default Role สำเร็จ'),
       error: () => this.toast.error('บันทึกไม่สำเร็จ'),
     });

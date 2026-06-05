@@ -1,5 +1,5 @@
 export const environment = {
   production: false,
   useMock: true,
-  apiBaseUrl: 'http://localhost:5000/api/user-service/v1',
+  apiBaseUrl: 'https://gateway-dev.exim.go.th/userservice-api/api/user-service/v1',
 };
