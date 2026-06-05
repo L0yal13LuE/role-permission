@@ -44,27 +44,47 @@ jobs:
     needs: build
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
 
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
     steps:
+      - name: Check Cloudflare secrets
+        id: check
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⚠️ CLOUDFLARE_API_TOKEN not set — skipping deploy"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Cloudflare Pages project (if not exists)
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"role-permission","production_branch":"master"}')
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then
+            echo "✅ Cloudflare Pages project created"
+          elif [ "$STATUS" = "409" ]; then
+            echo "ℹ️ Project already exists — skipping creation"
+          else
+            echo "❌ Unexpected status $STATUS when creating project"
+            exit 1
+          fi
+
       - name: Download build artifact
+        if: steps.check.outputs.skip == 'false'
         uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
 
-      - name: Check Cloudflare secrets
-        id: check-secrets
-        env:
-          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-        run: |
-          if [ "$HAS_TOKEN" = "true" ]; then
-            echo "deploy=true" >> $GITHUB_OUTPUT
-          else
-            echo "deploy=false" >> $GITHUB_OUTPUT
-            echo "⚠️ CLOUDFLARE_API_TOKEN secret not set — skipping deploy"
-          fi
-
       - name: Deploy to Cloudflare Pages
-        if: steps.check-secrets.outputs.deploy == 'true'
+        if: steps.check.outputs.skip == 'false'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
