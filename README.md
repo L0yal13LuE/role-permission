@@ -1,59 +1,95 @@
-# RolePermissionUi
+# APEX Platform — Role & Permission Management
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.1.2.
+Angular 21 frontend for the APEX Super App Platform's Role & Permission management system.
 
-## Development server
+## Features
 
-To start a local development server, run:
+| Page | Description |
+|------|-------------|
+| **Dashboard** | Stats overview, quick navigation |
+| **Applications** | Register/manage remote apps (name, app_code, base_url) |
+| **Roles** | Create global/company-specific roles + interactive permission matrix |
+| **Permissions** | Manage `resource:action` permissions per application |
+| **Companies** | Tenant companies, subscribed apps, and `single_user`/`multiple_user` mode config |
+| **Users** | User CRUD, view/assign/remove role assignments |
+| **Enrollments** | Enrollment requests — approve/reject (swaps Shell App role → ตัวแทน) |
 
-```bash
-ng serve
+## Mock vs Real API
+
+Toggle is available in the sidebar:
+- **🧪 Mock Mode** — in-memory data, no backend required (default)
+- **🌐 Real API** — calls the User Service at the configured `apiBaseUrl`
+
+Configure API URL in `src/environments/environment.ts`:
+```ts
+export const environment = {
+  useMock: true,                           // false = real API
+  apiBaseUrl: 'http://localhost:5000/api/user-service/v1',
+};
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Local Development
 
 ```bash
-ng generate component component-name
+npm install
+npm start           # http://localhost:4200
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+## Build
 
 ```bash
-ng generate --help
+npm run build       # production build → dist/role-permission-ui/browser/
 ```
 
-## Building
+## CI/CD — GitHub Actions → Cloudflare Pages
 
-To build the project run:
+Pipeline in `.github/workflows/ci-cd.yml`:
+1. **CI**: `npm ci` + `ng build --configuration=production` on every push/PR
+2. **CD**: Deploy to Cloudflare Pages on `main`/`master` branch push
+
+### Required GitHub Secrets
+
+Add these in **Settings → Secrets → Actions**:
+
+| Secret | Value |
+|--------|-------|
+| `CLOUDFLARE_API_TOKEN` | API token with **Cloudflare Pages:Edit** permission |
+| `CLOUDFLARE_ACCOUNT_ID` | `7e3a906db7cbb13c5dc7baa1ded4816a` |
+
+### Create Cloudflare Pages Project (one-time)
 
 ```bash
-ng build
+npx wrangler pages project create role-permission \
+  --production-branch=master
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Or create it via Cloudflare Dashboard → Workers & Pages → Create application → Pages → Connect to Git.
 
-## Running unit tests
+## Project Structure
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
 ```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
+src/
+  app/
+    core/
+      models/         # TypeScript interfaces (User, Role, Permission, etc.)
+      services/
+        mock-data.service.ts       # In-memory mock data
+        user-service.service.ts    # API facade (mock + real)
+        toast.service.ts           # Toast notifications
+    features/
+      login/          # Login page
+      dashboard/      # Stats & quick actions
+      applications/   # Application CRUD
+      roles/          # Role CRUD + permission matrix
+      permissions/    # Permission CRUD
+      companies/      # Company + app subscriptions + mode config
+      users/          # User CRUD + role assignments
+      enrollments/    # Enrollment approve/reject flow
+    layout/
+      shell/          # Sidebar + topbar shell
+    shared/
+      toast/          # Toast notification component
+  environments/
+    environment.ts              # Development (mock: true)
+    environment.production.ts   # Production (mock: false)
 ```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
