@@ -99,10 +99,8 @@ export interface CompanyApplication {
 export interface CompanyApplicationMode {
   mode: 'single_user' | 'multiple_user';
   is_active: boolean;
-  default_role_id: string | null;
 }
 export interface UpdateModeRequest { is_active: boolean; }
-export interface UpdateDefaultRoleRequest { role_id: string; }
 
 /* ── Enrollment ── */
 export interface Enrollment {
