@@ -225,6 +225,19 @@ export class DemoDataService {
     );
   }
 
+  assignShellRole(userId: string, roleId: string): Observable<void> {
+    return this.http.post<void>(
+      `${this.base}/users/${userId}/application-roles`,
+      { roleId }
+    );
+  }
+
+  removeShellRole(userId: string, roleId: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.base}/users/${userId}/application-roles/${roleId}`
+    );
+  }
+
   // ── Aggregated helpers ────────────────────────────────────────────
 
   /** Load roles + permissions for all given appIds in parallel */
