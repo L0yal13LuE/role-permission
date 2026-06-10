@@ -2,7 +2,7 @@ import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiModeService } from '../../../core/services/api-mode.service';
 import { DemoContextService } from '../../../core/services/demo-context.service';
-import { DemoDataService, ApiMember, ApiCompanyApp } from '../../../core/services/demo-data.service';
+import { DemoDataService, ApiMember, ApiCompanyApp, ApiApp } from '../../../core/services/demo-data.service';
 import { switchMap, forkJoin, of } from 'rxjs';
 
 interface SvcCard { id: string; icon: string; name: string; code: string; mode: string; }
@@ -161,22 +161,26 @@ export class DashboardComponent implements OnInit {
 
     this.demoCtx.bootstrap().pipe(
       switchMap(ctx => forkJoin({
-        apps:    this.dataApi.getCompanyApps(ctx.companyId),
-        members: this.dataApi.getMembers(ctx.companyId),
-        ctx:     of(ctx),
+        codexApps: this.dataApi.getApps(),
+        apps:      this.dataApi.getCompanyApps(ctx.companyId),
+        members:   this.dataApi.getMembers(ctx.companyId),
+        ctx:       of(ctx),
       }))
     ).subscribe({
-      next: ({ apps, members, ctx }) => {
+      next: ({ codexApps, apps, members, ctx }) => {
         this.companyName.set(ctx.companyNameTH || 'บริษัท');
 
         const appList = (apps as ApiCompanyApp[]).filter(a => a.isActive);
-        this.services.set(appList.map(a => ({
-          id:   a.applicationId,
-          icon: ICONS[a.appCode ?? ''] || '📦',
-          name: a.nameTH,
-          code: a.appCode ?? a.applicationId.slice(0, 6),
-          mode: 'multiple_user',
-        })));
+        this.services.set(appList.map(a => {
+          const info = (codexApps as ApiApp[]).find(c => c.id === a.applicationId);
+          return {
+            id:   a.applicationId,
+            icon: ICONS[info?.appCode?.toUpperCase() ?? ''] || '📦',
+            name: info?.appName ?? a.applicationId.slice(0, 6),
+            code: info?.appCode?.toUpperCase() ?? a.applicationId.slice(0, 6),
+            mode: 'multiple_user',
+          };
+        }));
 
         this.members.set((members as ApiMember[]).map((m, i) => ({
           id:       m.userId,

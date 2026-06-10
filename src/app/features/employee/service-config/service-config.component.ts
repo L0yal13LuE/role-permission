@@ -3,11 +3,11 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { forkJoin } from 'rxjs';
 import { ApiModeService } from '../../../core/services/api-mode.service';
-import { DemoDataService, ApiMode } from '../../../core/services/demo-data.service';
+import { DemoDataService, ApiMode, ModeDto } from '../../../core/services/demo-data.service';
 
 interface ServiceConfig {
   id: string; icon: string; name: string; code: string;
-  enabled: boolean; singleMode: boolean; multipleMode: boolean;
+  enabled: boolean; activeModes: Set<string>;
   originalEnabled: boolean;
   modeSaving: boolean;
 }
@@ -63,27 +63,21 @@ const ICON_MAP: Record<string, string> = { FX: '💱', TBP: '🏦', ECI: '🛡�
           <div class="card-body">
             <div class="form-label" style="margin-bottom:10px">รูปแบบอนุมัติที่รองรับ</div>
 
-            <label class="check-row" [class.disabled]="!svc.enabled || svc.modeSaving">
-              <input type="checkbox" [checked]="svc.singleMode"
-                     [disabled]="!svc.enabled || svc.modeSaving"
-                     (change)="toggleMode(svc, 'SingleUser', 'singleMode')">
-              <div>
-                <div style="font-weight:600;font-size:12.5px">Single User</div>
-                <div style="font-size:11.5px;color:#64748B">1 คนทำรายการและอนุมัติเอง</div>
-              </div>
-            </label>
+            @for (m of allModes(); track m.id) {
+              <label class="check-row" [class.disabled]="!svc.enabled || svc.modeSaving">
+                <input type="checkbox" [checked]="svc.activeModes.has(m.code)"
+                       [disabled]="!svc.enabled || svc.modeSaving"
+                       (change)="toggleMode(svc, m.code)">
+                <div>
+                  <div style="font-weight:600;font-size:12.5px">{{ m.name }}</div>
+                  @if (m.description) {
+                    <div style="font-size:11.5px;color:#64748B">{{ m.description }}</div>
+                  }
+                </div>
+              </label>
+            }
 
-            <label class="check-row" [class.disabled]="!svc.enabled || svc.modeSaving">
-              <input type="checkbox" [checked]="svc.multipleMode"
-                     [disabled]="!svc.enabled || svc.modeSaving"
-                     (change)="toggleMode(svc, 'MultipleUser', 'multipleMode')">
-              <div>
-                <div style="font-weight:600;font-size:12.5px">Multiple User</div>
-                <div style="font-size:11.5px;color:#64748B">มี workflow Maker → Approver</div>
-              </div>
-            </label>
-
-            @if (svc.enabled && svc.multipleMode) {
+            @if (svc.enabled && svc.activeModes.has('MultipleUser')) {
               <div class="badge b-multiple" style="margin-top:8px;font-size:10.5px">
                 Workflow: Requester → Maker → Approver
               </div>
@@ -108,19 +102,24 @@ export class ServiceConfigComponent implements OnInit {
   readonly apiMode = inject(ApiModeService);
   private dataApi  = inject(DemoDataService);
 
+  allModes = signal<ModeDto[]>([]);
+
   loading  = signal(false);
   saving   = signal(false);
   saved    = signal(false);
   apiError = signal<string | null>(null);
 
   services = signal<ServiceConfig[]>([
-    { id: 'fx',  icon: '💱', name: 'FX Forward Contract', code: 'FX',  enabled: true,  singleMode: true,  multipleMode: true,  originalEnabled: true,  modeSaving: false },
-    { id: 'tbp', icon: '🏦', name: 'TBP สินเชื่อ',        code: 'TBP', enabled: true,  singleMode: true,  multipleMode: true,  originalEnabled: true,  modeSaving: false },
-    { id: 'eci', icon: '🛡️', name: 'ECI ประกันการส่งออก', code: 'ECI', enabled: false, singleMode: false, multipleMode: false, originalEnabled: false, modeSaving: false },
+    { id: 'fx',  icon: '💱', name: 'FX Forward Contract', code: 'FX',  enabled: true,  activeModes: new Set(['SingleUser', 'MultipleUser']), originalEnabled: true,  modeSaving: false },
+    { id: 'tbp', icon: '🏦', name: 'TBP สินเชื่อ',        code: 'TBP', enabled: true,  activeModes: new Set(['SingleUser', 'MultipleUser']), originalEnabled: true,  modeSaving: false },
+    { id: 'eci', icon: '🛡️', name: 'ECI ประกันการส่งออก', code: 'ECI', enabled: false, activeModes: new Set(),                               originalEnabled: false, modeSaving: false },
   ]);
 
   ngOnInit() {
-    if (this.apiMode.isReal()) this.loadReal();
+    if (this.apiMode.isReal()) {
+      this.dataApi.getModes().subscribe({ next: m => this.allModes.set(m) });
+      this.loadReal();
+    }
   }
 
   private loadReal() {
@@ -142,12 +141,11 @@ export class ServiceConfigComponent implements OnInit {
               return {
                 id:              a.id,
                 icon:            ICON_MAP[a.appCode?.toUpperCase() ?? ''] ?? '📦',
-                name:            a.nameTH || a.nameEN || a.appCode || a.id,
+                name:            a.appName || a.appCode || a.id,
                 code:            a.appCode?.toUpperCase() ?? a.id.slice(0, 6),
                 enabled:         a.isActive,
                 originalEnabled: a.isActive,
-                singleMode:      modes.find(m => m.mode === 'SingleUser')?.isActive ?? false,
-                multipleMode:    modes.find(m => m.mode === 'MultipleUser')?.isActive ?? false,
+                activeModes:     new Set(modes.filter(m => m.isActive).map(m => m.code)),
                 modeSaving:      false,
               };
             }));
@@ -172,13 +170,17 @@ export class ServiceConfigComponent implements OnInit {
     );
   }
 
-  toggleMode(svc: ServiceConfig, mode: 'SingleUser' | 'MultipleUser', field: 'singleMode' | 'multipleMode') {
-    const newValue = !svc[field];
+  toggleMode(svc: ServiceConfig, modeCode: string) {
+    const isActive = svc.activeModes.has(modeCode);
+    const newValue = !isActive;
 
     if (!this.apiMode.isReal()) {
-      this.services.update(list =>
-        list.map(s => s.id === svc.id ? { ...s, [field]: newValue } : s)
-      );
+      this.services.update(list => list.map(s => {
+        if (s.id !== svc.id) return s;
+        const next = new Set(s.activeModes);
+        newValue ? next.add(modeCode) : next.delete(modeCode);
+        return { ...s, activeModes: next };
+      }));
       return;
     }
 
@@ -186,11 +188,14 @@ export class ServiceConfigComponent implements OnInit {
       list.map(s => s.id === svc.id ? { ...s, modeSaving: true } : s)
     );
 
-    this.dataApi.setAppMode(svc.id, mode, newValue).subscribe({
+    this.dataApi.setAppMode(svc.id, modeCode, newValue).subscribe({
       next: () => {
-        this.services.update(list =>
-          list.map(s => s.id === svc.id ? { ...s, [field]: newValue, modeSaving: false } : s)
-        );
+        this.services.update(list => list.map(s => {
+          if (s.id !== svc.id) return s;
+          const next = new Set(s.activeModes);
+          newValue ? next.add(modeCode) : next.delete(modeCode);
+          return { ...s, activeModes: next, modeSaving: false };
+        }));
       },
       error: err => {
         this.apiError.set(`Mode save failed: ${err?.status}`);

@@ -95,7 +95,7 @@ export interface CompanyApplication {
   subscribed_at: string;
 }
 
-/* ── Company Application Mode ── */
+/* ── Company Application Mode (legacy — used by user-service.service.ts / mock-data.service.ts) ── */
 export interface CompanyApplicationMode {
   mode: 'single_user' | 'multiple_user';
   is_active: boolean;

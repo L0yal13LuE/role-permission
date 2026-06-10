@@ -10,6 +10,7 @@ export const routes: Routes = [
     loadComponent: () => import('./layout/shell/shell.component').then(m => m.ShellComponent),
     children: [
       // Employee routes
+      { path: 'employee/modes',          loadComponent: () => import('./features/employee/modes/modes.component').then(m => m.ModesComponent) },
       { path: 'employee/service-config', loadComponent: () => import('./features/employee/service-config/service-config.component').then(m => m.ServiceConfigComponent) },
       { path: 'employee/mode-config',    loadComponent: () => import('./features/employee/mode-config/mode-config.component').then(m => m.ModeConfigComponent) },
       { path: 'employee/role-builder',   loadComponent: () => import('./features/employee/role-builder/role-builder.component').then(m => m.RoleBuilderComponent) },

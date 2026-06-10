@@ -5,9 +5,9 @@ import { Router } from '@angular/router';
 import { ApiModeService } from '../../../core/services/api-mode.service';
 import { DemoContextService } from '../../../core/services/demo-context.service';
 import { DemoDataService, ApiApp } from '../../../core/services/demo-data.service';
-import { switchMap, forkJoin, of, Observable } from 'rxjs';
+import { forkJoin, of, Observable } from 'rxjs';
 
-type ApprovalType = 'single' | 'multiple';
+type ApprovalType = string; // mode code, e.g. 'SingleUser' / 'MultipleUser'
 interface Svc     { id: string; apiId: string; icon: string; name: string; code: string; }
 interface OBMember { id: string; name: string; initials: string; email: string; color: string; roles: Record<string, string>; }
 
@@ -76,8 +76,8 @@ const MOCK_SERVICES: Svc[] = [
         </div>
         <div class="step-actions">
           <span></span>
-          <button class="btn btn-primary" [disabled]="selectedSvcs().length === 0" (click)="next()">
-            ถัดไป → ({{ selectedSvcs().length }} service)
+          <button class="btn btn-primary" [disabled]="selectedSvcs().length === 0 || loadingModes()" (click)="next()">
+            {{ loadingModes() ? '⏳ กำลังตรวจสอบ...' : 'ถัดไป →' }}
           </button>
         </div>
       }
@@ -92,20 +92,24 @@ const MOCK_SERVICES: Svc[] = [
                   {{ svcIcon(svcId) }} {{ svcName(svcId) }}
                 </div>
                 <div class="g2">
-                  <label class="approval-pick" [class.selected]="approvalTypes()[svcId] === 'single'" (click)="setApproval(svcId, 'single')">
-                    <div class="approval-radio">{{ approvalTypes()[svcId] === 'single' ? '●' : '○' }}</div>
-                    <div>
-                      <div style="font-weight:700;font-size:12.5px">Single User</div>
-                      <div style="font-size:11.5px;color:#64748B">1 คนทำรายการและอนุมัติเอง</div>
-                    </div>
-                  </label>
-                  <label class="approval-pick" [class.selected]="approvalTypes()[svcId] === 'multiple'" (click)="setApproval(svcId, 'multiple')">
-                    <div class="approval-radio">{{ approvalTypes()[svcId] === 'multiple' ? '●' : '○' }}</div>
-                    <div>
-                      <div style="font-weight:700;font-size:12.5px">Multiple User</div>
-                      <div style="font-size:11.5px;color:#64748B">มี workflow Maker → Approver</div>
-                    </div>
-                  </label>
+                  @if (modeActive('SingleUser')) {
+                    <label class="approval-pick" [class.selected]="approvalTypes()[svcId] === 'SingleUser'" (click)="setApproval(svcId, 'SingleUser')">
+                      <div class="approval-radio">{{ approvalTypes()[svcId] === 'SingleUser' ? '●' : '○' }}</div>
+                      <div>
+                        <div style="font-weight:700;font-size:12.5px">Single User</div>
+                        <div style="font-size:11.5px;color:#64748B">1 คนทำรายการและอนุมัติเอง</div>
+                      </div>
+                    </label>
+                  }
+                  @if (modeActive('MultipleUser')) {
+                    <label class="approval-pick" [class.selected]="approvalTypes()[svcId] === 'MultipleUser'" (click)="setApproval(svcId, 'MultipleUser')">
+                      <div class="approval-radio">{{ approvalTypes()[svcId] === 'MultipleUser' ? '●' : '○' }}</div>
+                      <div>
+                        <div style="font-weight:700;font-size:12.5px">Multiple User</div>
+                        <div style="font-size:11.5px;color:#64748B">มี workflow Maker → Approver</div>
+                      </div>
+                    </label>
+                  }
                 </div>
               </div>
             }
@@ -132,7 +136,7 @@ const MOCK_SERVICES: Svc[] = [
                   @for (svcId of selectedSvcs(); track svcId) {
                     <th style="min-width:130px">
                       {{ svcIcon(svcId) }} {{ svcId.toUpperCase() }}
-                      <span class="badge" [class]="approvalTypes()[svcId] === 'single' ? 'b-single' : 'b-multiple'" style="font-size:9px;margin-left:3px">
+                      <span class="badge" [class]="approvalTypes()[svcId] === 'SingleUser' ? 'b-single' : 'b-multiple'" style="font-size:9px;margin-left:3px">
                         {{ approvalTypes()[svcId] }}
                       </span>
                     </th>
@@ -147,9 +151,16 @@ const MOCK_SERVICES: Svc[] = [
                     <td style="color:#64748B;font-size:12px">{{ m.email }}</td>
                     @for (svcId of selectedSvcs(); track svcId) {
                       <td>
-                        <select class="form-input" style="padding:5px 8px;font-size:12px" [(ngModel)]="m.roles[svcId]">
-                          @for (r of roleOptions(svcId); track r) { <option [value]="r">{{ r }}</option> }
-                        </select>
+                        @if (loadingRolePool()) {
+                          <span style="font-size:11px;color:#64748B">⏳ โหลด roles...</span>
+                        } @else if (roleOptions(svcId).length === 0) {
+                          <span style="font-size:11px;color:#94A3B8">ไม่มี role</span>
+                        } @else {
+                          <select class="form-input" style="padding:5px 8px;font-size:12px" [(ngModel)]="m.roles[svcId]">
+                            <option value="">— เลือก —</option>
+                            @for (r of roleOptions(svcId); track r) { <option [value]="r">{{ r }}</option> }
+                          </select>
+                        }
                       </td>
                     }
                     <td><button class="btn btn-danger btn-sm" (click)="removeOBMember(m.id)">✕</button></td>
@@ -216,14 +227,18 @@ export class OnboardingComponent implements OnInit {
     { n: 3, label: 'กำหนด Role' },
   ];
 
-  step          = signal(1);
-  done          = signal(false);
-  loading       = signal(false);
-  submitting    = signal(false);
-  apiError      = signal<string | null>(null);
-  selectedSvcs  = signal<string[]>([]);
-  approvalTypes = signal<Record<string, ApprovalType>>({});
-  allServices   = signal<Svc[]>(MOCK_SERVICES);
+  step             = signal(1);
+  done             = signal(false);
+  loading          = signal(false);
+  loadingModes     = signal(false);
+  loadingRolePool  = signal(false);
+  submitting       = signal(false);
+  apiError         = signal<string | null>(null);
+  selectedSvcs     = signal<string[]>([]);
+  approvalTypes    = signal<Record<string, ApprovalType>>({});
+  allServices      = signal<Svc[]>(MOCK_SERVICES);
+  activeModes      = signal<string[]>([]);
+  rolePool         = signal<string[]>([]);
 
   private counter = 1;
   obMembers = signal<OBMember[]>([
@@ -236,6 +251,7 @@ export class OnboardingComponent implements OnInit {
   svcIcon        = (id: string)  => this.allServices().find(s => s.id === id)?.icon ?? '';
   allApprovalSet = ()            => this.selectedSvcs().every(id => !!this.approvalTypes()[id]);
   allRolesSet    = ()            => this.obMembers().every(m => this.selectedSvcs().every(s => !!m.roles[s]));
+  modeActive     = (m: string)  => !this.apiMode.isReal() || this.activeModes().includes(m);
 
   ngOnInit() {
     if (this.apiMode.isReal()) this.loadApps();
@@ -243,15 +259,13 @@ export class OnboardingComponent implements OnInit {
 
   private loadApps() {
     this.loading.set(true);
-    this.demoCtx.bootstrap().pipe(
-      switchMap(() => this.dataApi.getApps())
-    ).subscribe({
+    this.dataApi.getApps().subscribe({
       next: (apps: ApiApp[]) => {
         this.allServices.set(apps.filter(a => a.isActive).map(a => ({
           id:    a.appCode?.toLowerCase() ?? a.id,
           apiId: a.id,
           icon:  ICON_MAP[a.appCode?.toUpperCase() ?? ''] ?? '📦',
-          name:  a.nameTH || a.nameEN,
+          name:  a.appName,
           code:  a.appCode?.toUpperCase() ?? a.id.slice(0, 6),
         })));
         this.loading.set(false);
@@ -263,22 +277,74 @@ export class OnboardingComponent implements OnInit {
     });
   }
 
-  roleOptions(svcId: string): string[] {
-    const at = this.approvalTypes()[svcId];
-    return at === 'single' ? ['Data Entry', 'Viewer'] : ['Admin', 'Maker', 'Approver', 'Viewer', 'Requester'];
+  private loadModesAndAdvance() {
+    const svcId = this.selectedSvcs()[0];
+    const svc   = this.allServices().find(s => s.id === svcId);
+    if (!svc?.apiId) { this.step.set(2); return; }
+
+    this.loadingModes.set(true);
+    this.apiError.set(null);
+
+    this.dataApi.getAppModes(svc.apiId).subscribe({
+      next: modes => {
+        const active = modes.filter(m => m.isActive).map(m => m.code);
+        this.activeModes.set(active);
+        this.loadingModes.set(false);
+
+        if (active.length === 0) {
+          this.apiError.set('App นี้ยังไม่มี mode ที่เปิดใช้งาน');
+        } else if (active.length === 1) {
+          this.approvalTypes.update(m => ({ ...m, [svcId]: active[0] }));
+          this.loadRolePool(svc.apiId, active[0]);
+          this.step.set(3);
+        } else {
+          this.step.set(2);
+        }
+      },
+      error: err => {
+        this.apiError.set(`Load modes error: ${err?.status}`);
+        this.loadingModes.set(false);
+      },
+    });
+  }
+
+  private loadRolePool(apiId: string, mode: string) {
+    this.loadingRolePool.set(true);
+    this.dataApi.getRolesByAppAndMode(apiId, mode).subscribe({
+      next: roles => {
+        this.rolePool.set(roles.map(r => r.name));
+        this.loadingRolePool.set(false);
+      },
+      error: () => {
+        this.rolePool.set([]);
+        this.loadingRolePool.set(false);
+      },
+    });
+  }
+
+  roleOptions(_svcId: string): string[] {
+    if (this.apiMode.isReal()) return this.rolePool();
+    const at = this.approvalTypes()[_svcId];
+    return at === 'SingleUser' ? ['Data Entry', 'Viewer'] : ['Admin', 'Maker', 'Approver', 'Viewer', 'Requester'];
   }
 
   toggleSvc(id: string) {
-    this.selectedSvcs.update(list =>
-      list.includes(id) ? list.filter(s => s !== id) : [...list, id]
-    );
+    this.selectedSvcs.set(this.selectedSvcs()[0] === id ? [] : [id]);
   }
 
-  setApproval(svcId: string, type: ApprovalType) {
-    this.approvalTypes.update(m => ({ ...m, [svcId]: type }));
+  setApproval(svcId: string, modeCode: string) {
+    this.approvalTypes.update(m => ({ ...m, [svcId]: modeCode }));
+    const svc = this.allServices().find(s => s.id === svcId);
+    if (svc?.apiId) this.loadRolePool(svc.apiId, modeCode);
   }
 
-  next() { this.step.update(s => s + 1); }
+  next() {
+    if (this.step() === 1 && this.apiMode.isReal()) {
+      this.loadModesAndAdvance();
+    } else {
+      this.step.update(s => s + 1);
+    }
+  }
 
   addOBMember() {
     this.obMembers.update(list => [...list, {

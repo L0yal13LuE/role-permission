@@ -178,6 +178,7 @@ export class ShellComponent {
   router = inject(Router);
 
   private employeeNav: NavItem[] = [
+    { label: 'Modes',           icon: '🗂️',  route: '/employee/modes' },
     { label: 'Service Config',  icon: '⚙️',  route: '/employee/service-config' },
     { label: 'Mode Config',     icon: '🔧',  route: '/employee/mode-config' },
     { label: 'Role Builder',    icon: '🛡️',  route: '/employee/role-builder' },

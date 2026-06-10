@@ -1,12 +1,12 @@
 import { Component, signal, computed, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ApiModeService } from '../../../core/services/api-mode.service';
-import { DemoDataService, ApiRole, ApiPermission, ApiApp } from '../../../core/services/demo-data.service';
+import { DemoDataService, ApiRole, ApiPermission, ApiApp, ModeDto } from '../../../core/services/demo-data.service';
 import { forkJoin } from 'rxjs';
 
 type SvcId = string;
 interface PermRow  { group: string; id: string; label: string; }
-interface RoleEntry { id: string; label: string; badge: string; apiId: string; }
+interface RoleEntry { id: string; label: string; badge: string; apiId: string; modes: string[]; }
 
 const ICON_MAP: Record<string, string> = { FX: '💱', TBP: '🏦', ECI: '🛡️' };
 
@@ -24,12 +24,12 @@ const MOCK_SVCS: { id: SvcId; icon: string; label: string }[] = [
 ];
 
 const MOCK_ROLES: RoleEntry[] = [
-  { id: 'admin',     label: 'Admin',      badge: 'b-orange',   apiId: '' },
-  { id: 'maker',     label: 'Maker',      badge: 'b-blue',     apiId: '' },
-  { id: 'approver',  label: 'Approver',   badge: 'b-multiple', apiId: '' },
-  { id: 'viewer',    label: 'Viewer',     badge: 'b-viewer',   apiId: '' },
-  { id: 'dataentry', label: 'Data Entry', badge: 'b-inactive', apiId: '' },
-  { id: 'requester', label: 'Requester',  badge: 'b-purple',   apiId: '' },
+  { id: 'admin',     label: 'Admin',      badge: 'b-orange',   apiId: '', modes: [] },
+  { id: 'maker',     label: 'Maker',      badge: 'b-blue',     apiId: '', modes: [] },
+  { id: 'approver',  label: 'Approver',   badge: 'b-multiple', apiId: '', modes: [] },
+  { id: 'viewer',    label: 'Viewer',     badge: 'b-viewer',   apiId: '', modes: [] },
+  { id: 'dataentry', label: 'Data Entry', badge: 'b-inactive', apiId: '', modes: [] },
+  { id: 'requester', label: 'Requester',  badge: 'b-purple',   apiId: '', modes: [] },
 ];
 
 const MOCK_PERMS: Record<string, PermRow[]> = {
@@ -69,7 +69,6 @@ interface AppTabPayload {
   rolePerms: Record<string, string[]>;
 }
 
-// Per-tab data loaded from API (real mode)
 interface TabData {
   appId:   string;
   roles:   RoleEntry[];
@@ -121,8 +120,22 @@ interface TabData {
             <tr>
               <th style="min-width:160px">Permission</th>
               @for (role of currentRoles(); track role.id) {
-                <th class="center" style="min-width:90px">
+                <th class="center" style="min-width:100px">
                   <span class="badge" [class]="role.badge">{{ role.label }}</span>
+                  @if (apiMode.isReal()) {
+                    <div class="mode-chips">
+                      @for (m of role.modes; track m) {
+                        <span class="badge b-purple mode-chip" title="คลิกเพื่อลบ mode" (click)="removeMode(role, m)">
+                          {{ m }} ✕
+                        </span>
+                      }
+                      @for (m of availableModes(role); track m.id) {
+                        <span class="badge b-viewer mode-chip mode-chip-add" title="เพิ่ม mode" (click)="assignMode(role, m.code)">
+                          + {{ m.name }}
+                        </span>
+                      }
+                    </div>
+                  }
                 </th>
               }
             </tr>
@@ -154,12 +167,20 @@ interface TabData {
       </div>
     </div>
   `,
-  styles: [`.pcheck-toggle.changed { outline: 2px solid #034EA1; outline-offset: 2px; }`],
+  styles: [`
+    .pcheck-toggle.changed { outline: 2px solid #034EA1; outline-offset: 2px; }
+    .mode-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 5px; }
+    .mode-chip { font-size: 10px; cursor: pointer; user-select: none; }
+    .mode-chip-add { opacity: 0.6; }
+    .mode-chip-add:hover { opacity: 1; }
+  `],
 })
 export class RoleBuilderComponent implements OnInit {
-  private apiMode  = inject(ApiModeService);
+  protected apiMode  = inject(ApiModeService);
   private dataApi  = inject(DemoDataService);
   private apiApps: ApiApp[] = [];
+
+  allModes = signal<ModeDto[]>([]);
 
   loading  = signal(false);
   saving   = signal(false);
@@ -206,6 +227,10 @@ export class RoleBuilderComponent implements OnInit {
     return n;
   });
 
+  availableModes(role: RoleEntry): ModeDto[] {
+    return this.allModes().filter(m => !role.modes.includes(m.code));
+  }
+
   hasPerm(role: RoleEntry, perm: PermRow): boolean {
     const td = this.tabData()[this.activeTab()];
     if (td) return td.matrix[role.apiId]?.has(perm.id) ?? false;
@@ -223,7 +248,10 @@ export class RoleBuilderComponent implements OnInit {
   }
 
   ngOnInit() {
-    if (this.apiMode.isReal()) this.loadReal();
+    if (this.apiMode.isReal()) {
+      this.dataApi.getModes().subscribe({ next: m => this.allModes.set(m) });
+      this.loadReal();
+    }
   }
 
   switchTab(tab: SvcId) {
@@ -231,6 +259,24 @@ export class RoleBuilderComponent implements OnInit {
     if (this.apiMode.isReal() && !this.tabData()[tab]) {
       this.loadTabReal(tab);
     }
+  }
+
+  assignMode(role: RoleEntry, mode: string) {
+    const appId = this.tabData()[this.activeTab()]?.appId;
+    if (!appId) return;
+    this.dataApi.assignRoleMode(appId, role.apiId, mode).subscribe({
+      next: () => this.loadTabReal(this.activeTab()),
+      error: err => this.apiError.set(`Assign mode failed: ${err?.status}`),
+    });
+  }
+
+  removeMode(role: RoleEntry, mode: string) {
+    const appId = this.tabData()[this.activeTab()]?.appId;
+    if (!appId) return;
+    this.dataApi.removeRoleMode(appId, role.apiId, mode).subscribe({
+      next: () => this.loadTabReal(this.activeTab()),
+      error: err => this.apiError.set(`Remove mode failed: ${err?.status}`),
+    });
   }
 
   private loadReal() {
@@ -244,7 +290,7 @@ export class RoleBuilderComponent implements OnInit {
         const svcs = apps.map(a => ({
           id:    (a.appCode ?? a.id).toLowerCase(),
           icon:  ICON_MAP[a.appCode?.toUpperCase() ?? ''] ?? '📦',
-          label: a.appCode?.toUpperCase() ?? a.id.slice(0, 6),
+          label: a.appCode?.toUpperCase() ?? a.appName ?? a.id.slice(0, 6),
         }));
         this.svcs.set(svcs);
 
@@ -393,6 +439,7 @@ function buildTabData(appId: string, data: AppTabPayload | null): TabData | null
     label: r.name,
     badge: BADGE_MAP[r.name] ?? 'b-inactive',
     apiId: r.id,
+    modes: r.modes ?? [],
   }));
 
   const perms: PermRow[] = data.permissions.map(p => ({

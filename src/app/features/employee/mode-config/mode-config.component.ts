@@ -1,7 +1,8 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-
-interface ModeRole { id: string; name: string; locked: boolean; single: boolean; multiple: boolean; }
+import { Observable } from 'rxjs';
+import { ApiModeService } from '../../../core/services/api-mode.service';
+import { DemoDataService, ApiApp, ApiRole, ModeDto } from '../../../core/services/demo-data.service';
 
 @Component({
   selector: 'app-mode-config',
@@ -9,121 +10,186 @@ interface ModeRole { id: string; name: string; locked: boolean; single: boolean;
   imports: [CommonModule],
   template: `
     <div class="sec-hd">
-      <div class="sec-hd-row">
-        <div>
-          <div class="sh">Mode Role Configuration</div>
-          <div class="ss">กำหนด role ที่ใช้งานได้ในแต่ละรูปแบบอนุมัติ</div>
-        </div>
-        <button class="btn btn-primary" (click)="save()">💾 บันทึก</button>
+      <div>
+        <div class="sh">Mode Role Configuration</div>
+        <div class="ss">กำหนด role ที่อยู่ใน curated pool ของแต่ละ mode</div>
       </div>
     </div>
 
-    @if (saved()) {
-      <div class="alert alert-green" style="margin-bottom:16px">✅ บันทึกเรียบร้อย</div>
+    @if (apiError()) {
+      <div class="alert alert-red" style="margin-bottom:16px">⚠️ {{ apiError() }}</div>
     }
 
-    <div class="alert" style="background:#FEF3C7;border-color:#F59E0B;color:#92400E;margin-bottom:16px;font-size:12px">
-      🔶 <strong>Mock-only screen</strong> — ยังไม่มี API สำหรับ platform-level mode config. Mode ที่บริษัทใช้จริงอยู่ใน <code>PATCH /companies/&#123;id&#125;/applications/&#123;appId&#125;/modes/&#123;mode&#125;</code> (per-company)
+    <!-- App tabs -->
+    <div class="tab-bar" style="margin-bottom:20px">
+      @if (loadingApps()) {
+        <span style="font-size:12px;color:#64748B">⏳ กำลังโหลด apps...</span>
+      }
+      @for (app of apps(); track app.id) {
+        <button class="tab-btn" [class.active]="selectedAppId() === app.id" (click)="selectApp(app.id)">
+          {{ app.appCode?.toUpperCase() ?? app.appName }}
+        </button>
+      }
     </div>
 
-    <div class="alert alert-info" style="margin-bottom:18px">
-      ℹ️ Role ที่ล็อคไว้ไม่สามารถเปลี่ยนแปลงได้ — เป็นค่า default ของแต่ละ mode
-    </div>
-
-    <div class="g2">
-      <!-- Single Mode -->
-      <div class="card">
-        <div class="card-hd">
-          <div>
-            <div class="card-title">Single User Mode</div>
-            <div class="card-sub">1 คนทำรายการและอนุมัติเอง</div>
+    @if (selectedAppId()) {
+      @if (loadingRoles()) {
+        <div style="color:#64748B;font-size:13px">⏳ กำลังโหลด roles...</div>
+      } @else if (roles().length === 0) {
+        <div style="color:#94A3B8;font-size:13px">ไม่มี role ใน app นี้</div>
+      } @else {
+        <div class="card">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  @for (m of allModes(); track m.id) {
+                    <th style="text-align:center;min-width:130px">
+                      <span class="badge b-single">{{ m.name }}</span>
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (role of roles(); track role.id) {
+                  <tr>
+                    <td>
+                      <span style="font-weight:600;font-size:13px">{{ role.name }}</span>
+                      @if (!role.isActive) {
+                        <span class="badge b-inactive" style="margin-left:6px;font-size:10px">Inactive</span>
+                      }
+                    </td>
+                    @for (m of allModes(); track m.id) {
+                      <td style="text-align:center">
+                        @if (isSaving(role.id, m.code)) {
+                          <span style="font-size:12px;color:#64748B">⏳</span>
+                        } @else {
+                          <div class="toggle-wrap" (click)="toggleMode(role, m)" style="justify-content:center">
+                            <div class="toggle-track" [class.on]="hasMode(role, m)">
+                              <div class="toggle-thumb"></div>
+                            </div>
+                          </div>
+                        }
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
           </div>
-          <span class="badge b-single">Single</span>
         </div>
-        <div class="card-body">
-          @for (r of roles(); track r.id) {
-            <div class="role-row" [class.locked]="r.locked">
-              <div class="role-info">
-                <span class="badge" [class]="roleBadge(r.id)" style="margin-right:8px">{{ r.name }}</span>
-                @if (r.locked) { <span class="lock-icon">🔒</span> }
-              </div>
-              <div class="toggle-wrap" (click)="!r.locked && toggleRole(r, 'single')">
-                <div class="toggle-track" [class.on]="r.single">
-                  <div class="toggle-thumb"></div>
-                </div>
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-
-      <!-- Multiple Mode -->
-      <div class="card">
-        <div class="card-hd">
-          <div>
-            <div class="card-title">Multiple User Mode</div>
-            <div class="card-sub">มี workflow Maker → Approver</div>
-          </div>
-          <span class="badge b-multiple">Multiple</span>
-        </div>
-        <div class="card-body">
-          @for (r of roles(); track r.id) {
-            <div class="role-row" [class.locked]="r.id === 'admin' || r.id === 'maker'">
-              <div class="role-info">
-                <span class="badge" [class]="roleBadge(r.id)" style="margin-right:8px">{{ r.name }}</span>
-                @if (r.id === 'admin' || r.id === 'maker') { <span class="lock-icon">🔒</span> }
-              </div>
-              <div class="toggle-wrap" (click)="(r.id !== 'admin' && r.id !== 'maker') && toggleRole(r, 'multiple')">
-                <div class="toggle-track" [class.on]="r.multiple">
-                  <div class="toggle-thumb"></div>
-                </div>
-              </div>
-            </div>
-          }
-        </div>
-      </div>
-    </div>
+      }
+    } @else if (!loadingApps()) {
+      <div style="color:#94A3B8;font-size:13px">เลือก app เพื่อจัดการ modes</div>
+    }
   `,
   styles: [`
-    .role-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 0; border-bottom: 1px solid #F1F5F9;
-      &:last-child { border-bottom: none; }
-      &.locked { opacity: .65; }
+    .tab-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab-btn {
+      padding: 6px 14px; border-radius: 6px; font-size: 12.5px; font-weight: 600;
+      border: 1px solid #E2E8F0; background: #fff; cursor: pointer; color: #475569;
+      transition: all .15s;
+      &:hover { border-color: #034EA1; color: #034EA1; }
+      &.active { background: #034EA1; color: #fff; border-color: #034EA1; }
     }
-    .role-info { display: flex; align-items: center; }
-    .lock-icon { font-size: 12px; color: #94A3B8; }
   `],
 })
-export class ModeConfigComponent {
-  saved = signal(false);
+export class ModeConfigComponent implements OnInit {
+  protected apiMode    = inject(ApiModeService);
+  private dataApi      = inject(DemoDataService);
 
-  roles = signal<ModeRole[]>([
-    { id: 'dataentry', name: 'Data Entry', locked: true,  single: true,  multiple: false },
-    { id: 'admin',     name: 'Admin',      locked: false, single: false, multiple: true  },
-    { id: 'maker',     name: 'Maker',      locked: false, single: false, multiple: true  },
-    { id: 'approver',  name: 'Approver',   locked: false, single: false, multiple: true  },
-    { id: 'viewer',    name: 'Viewer',     locked: false, single: true,  multiple: true  },
-    { id: 'requester', name: 'Requester',  locked: false, single: false, multiple: true  },
-  ]);
+  readonly allModes = signal<ModeDto[]>([]);
 
-  roleBadge(id: string): string {
-    const map: Record<string, string> = {
-      admin: 'b-orange', maker: 'b-blue', approver: 'b-multiple',
-      viewer: 'b-viewer', requester: 'b-purple', dataentry: 'b-inactive',
-    };
-    return map[id] ?? 'b-inactive';
+  apps          = signal<ApiApp[]>([]);
+  selectedAppId = signal<string | null>(null);
+  roles         = signal<ApiRole[]>([]);
+  loadingApps   = signal(false);
+  loadingRoles  = signal(false);
+  apiError      = signal<string | null>(null);
+
+  private savingSet = signal<Set<string>>(new Set());
+
+  isSaving(roleId: string, modeCode: string): boolean {
+    return this.savingSet().has(`${roleId}:${modeCode}`);
   }
 
-  toggleRole(role: ModeRole, mode: 'single' | 'multiple') {
-    if (role.locked) return;
-    this.roles.update(list =>
-      list.map(r => r.id === role.id ? { ...r, [mode]: !r[mode] } : r)
-    );
+  hasMode(role: ApiRole, mode: ModeDto): boolean {
+    return (role.modes ?? []).includes(mode.code);
   }
 
-  save() {
-    this.saved.set(true);
-    setTimeout(() => this.saved.set(false), 2500);
+  ngOnInit() {
+    if (this.apiMode.isReal()) {
+      this.loadModes();
+      this.loadApps();
+    }
+  }
+
+  private loadModes() {
+    this.dataApi.getModes().subscribe({
+      next: modes => this.allModes.set(modes),
+      error: err => this.apiError.set(`Load modes error: ${err?.status}`),
+    });
+  }
+
+  private loadApps() {
+    this.loadingApps.set(true);
+    this.dataApi.getApps().subscribe({
+      next: apps => {
+        this.apps.set(apps);
+        this.loadingApps.set(false);
+        if (apps.length > 0) this.selectApp(apps[0].id);
+      },
+      error: err => {
+        this.apiError.set(`Load apps error: ${err?.status}`);
+        this.loadingApps.set(false);
+      },
+    });
+  }
+
+  selectApp(appId: string) {
+    this.selectedAppId.set(appId);
+    this.loadingRoles.set(true);
+    this.apiError.set(null);
+    this.dataApi.getRoles(appId).subscribe({
+      next: roles => {
+        this.roles.set(roles);
+        this.loadingRoles.set(false);
+      },
+      error: err => {
+        this.apiError.set(`Load roles error: ${err?.status}`);
+        this.loadingRoles.set(false);
+      },
+    });
+  }
+
+  toggleMode(role: ApiRole, mode: ModeDto) {
+    const appId = this.selectedAppId();
+    if (!appId) return;
+
+    const key = `${role.id}:${mode.code}`;
+    this.savingSet.update(s => new Set(s).add(key));
+
+    const already = this.hasMode(role, mode);
+    const call: Observable<unknown> = already
+      ? this.dataApi.removeRoleMode(appId, role.id, mode.code)
+      : this.dataApi.assignRoleMode(appId, role.id, mode.code);
+
+    call.subscribe({
+      next: () => {
+        this.roles.update(list => list.map(r => {
+          if (r.id !== role.id) return r;
+          const modes = already
+            ? (r.modes ?? []).filter(m => m !== mode.code)
+            : [...(r.modes ?? []), mode.code];
+          return { ...r, modes };
+        }));
+        this.savingSet.update(s => { const n = new Set(s); n.delete(key); return n; });
+      },
+      error: err => {
+        this.apiError.set(`Save failed: ${err?.status}`);
+        this.savingSet.update(s => { const n = new Set(s); n.delete(key); return n; });
+      },
+    });
   }
 }

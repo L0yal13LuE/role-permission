@@ -6,9 +6,10 @@ import { DemoContextService } from './demo-context.service';
 
 // ── Response shapes ──────────────────────────────────────────────────
 
+/** App catalog from Codex service (F1/F2/F3) */
 export interface ApiApp {
-  id: string; nameTH: string; nameEN: string; isActive: boolean;
-  appCode?: string | null; baseUrl?: string | null; routePath?: string | null;
+  id: string; appCode: string | null; appName: string; isActive: boolean;
+  baseUrl?: string | null; routePath?: string | null;
 }
 
 export interface ApiCompanyListItem {
@@ -18,16 +19,20 @@ export interface ApiCompanyListItem {
 }
 
 export interface ApiCompanyApp {
-  applicationId: string; nameTH: string; nameEN: string;
-  appCode?: string; isActive: boolean; subscribedAt: string;
+  applicationId: string; isActive: boolean; subscribedAt: string;
+}
+
+export interface ModeDto {
+  id: string; code: string; name: string; description?: string | null; sortOrder: number;
 }
 
 export interface ApiMode {
-  mode: string; isActive: boolean;
+  modeId: string; code: string; name: string; isActive: boolean;
 }
 
 export interface ApiRole {
   id: string; name: string; description: string; isActive: boolean;
+  modes?: string[];
 }
 
 export interface ApiPermission {
@@ -50,23 +55,31 @@ export interface ApiPagedResult<T> {
   totalPages: number; hasNextPage: boolean; hasPreviousPage: boolean;
 }
 
+export interface ApiRoleModeDto {
+  roleModeId: string; roleId: string; modeId: string; code: string; name: string; isActive: boolean;
+}
+
 // ── Service ──────────────────────────────────────────────────────────
 
 @Injectable({ providedIn: 'root' })
 export class DemoDataService {
-  private http = inject(HttpClient);
-  private ctx  = inject(DemoContextService);
-  private base = environment.apiBaseUrl;
+  private http      = inject(HttpClient);
+  private ctx       = inject(DemoContextService);
+  private base      = environment.apiBaseUrl;
+  private codexBase = environment.codexBaseUrl;
 
-  // ── Applications ─────────────────────────────────────────────────
+  // ── Applications (F1 — now from Codex) ──────────────────────────
 
   getApps(): Observable<ApiApp[]> {
-    return this.http.get<ApiApp[]>(`${this.base}/apps`);
+    return this.http.get<ApiPagedResult<ApiApp>>(
+      `${this.codexBase}/app-management/apps`,
+      { params: { isActive: 'true', pageSize: '100', sortBy: 'sortOrder', sortDirection: 'asc' } }
+    ).pipe(map(r => r.items ?? []));
   }
 
   updateApp(id: string, isActive: boolean): Observable<void> {
-    // PUT /apps/{id} — only send isActive change
-    return this.http.put<void>(`${this.base}/apps/${id}`, { isActive });
+    const status = isActive ? 'Active' : 'Inactive';
+    return this.http.patch<void>(`${this.codexBase}/app-management/apps/${id}/status`, { status, description: null });
   }
 
   // ── Company Applications ─────────────────────────────────────────
@@ -81,6 +94,22 @@ export class DemoDataService {
 
   unsubscribeFromApp(companyId: string, applicationId: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/companies/${companyId}/applications/${applicationId}`);
+  }
+
+  getModes(): Observable<ModeDto[]> {
+    return this.http.get<ModeDto[]>(`${this.base}/modes`);
+  }
+
+  createMode(req: { code: string; name: string; description?: string | null; sortOrder: number }): Observable<ModeDto> {
+    return this.http.post<ModeDto>(`${this.base}/modes`, req);
+  }
+
+  updateMode(id: string, req: { name: string; description?: string | null; sortOrder: number }): Observable<ModeDto> {
+    return this.http.put<ModeDto>(`${this.base}/modes/${id}`, req);
+  }
+
+  deleteMode(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/modes/${id}`);
   }
 
   getAppModes(appId: string): Observable<ApiMode[]> {
@@ -103,6 +132,34 @@ export class DemoDataService {
     return this.http.get<{ appId: string; roles: ApiRole[] }>(`${this.base}/admin/apps/${appId}/roles`).pipe(
       map(r => r.roles ?? [])
     );
+  }
+
+  // ── Role Modes (RoleModeMapping — 1C) ───────────────────────────
+
+  assignRoleMode(appId: string, roleId: string, mode: string): Observable<ApiRoleModeDto> {
+    return this.http.post<ApiRoleModeDto>(
+      `${this.base}/admin/apps/${appId}/roles/${roleId}/modes`,
+      { mode }
+    );
+  }
+
+  setRoleModeActive(appId: string, roleId: string, mode: string, isActive: boolean): Observable<ApiRoleModeDto> {
+    return this.http.patch<ApiRoleModeDto>(
+      `${this.base}/admin/apps/${appId}/roles/${roleId}/modes/${mode}`,
+      { isActive }
+    );
+  }
+
+  removeRoleMode(appId: string, roleId: string, mode: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.base}/admin/apps/${appId}/roles/${roleId}/modes/${mode}`
+    );
+  }
+
+  getRolesByAppAndMode(appId: string, mode: string): Observable<ApiRole[]> {
+    return this.http.get<{ appId: string; mode: string; roles: ApiRole[] }>(
+      `${this.base}/apps/${appId}/modes/${mode}/roles`
+    ).pipe(map(r => r.roles ?? []));
   }
 
   // ── Permissions ─────────────────────────────────────────────────
@@ -185,8 +242,8 @@ export class DemoDataService {
   /** Load member list + their roles in each subscribed app */
   loadTeamData(companyId: string, appIds: string[]): Observable<{
     members: ApiMember[];
-    roles: Record<string, ApiRole[]>;       // appId → available roles
-    memberRoles: Record<string, Record<string, ApiRole[]>>;  // userId → appId → roles
+    roles: Record<string, ApiRole[]>;
+    memberRoles: Record<string, Record<string, ApiRole[]>>;
   }> {
     return forkJoin({
       members:  this.getMembers(companyId),
@@ -195,7 +252,7 @@ export class DemoDataService {
       map(({ members, appRoles }) => ({
         members,
         roles: appRoles,
-        memberRoles: {},   // lazy-load per member if needed
+        memberRoles: {},
       }))
     );
   }
