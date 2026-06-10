@@ -23,12 +23,12 @@ registry=https://registry.npmjs.org/
 #    [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("YOUR_PAT_TOKEN"))
 # 5. แทนที่ YOUR_BASE64_PAT ด้านล่างด้วย Base64 string ที่ได้
 
-pkgs.dev.azure.com/eximth/SuperApp-Platform/_packaging/POC/npm/registry/:username=exim-dev
-pkgs.dev.azure.com/eximth/SuperApp-Platform/_packaging/POC/npm/registry/:_password=YOUR_BASE64_PAT
-pkgs.dev.azure.com/eximth/SuperApp-Platform/_packaging/POC/npm/registry/:email=npm-requires-email@example.com
-pkgs.dev.azure.com/eximth/SuperApp-Platform/_packaging/POC/npm/:username=exim-dev
-pkgs.dev.azure.com/eximth/SuperApp-Platform/_packaging/POC/npm/:_password=YOUR_BASE64_PAT
-pkgs.dev.azure.com/eximth/SuperApp-Platform/_packaging/POC/npm/:email=npm-requires-email@example.com
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/registry/:username=exim-dev
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/registry/:_password=YOUR_BASE64_PAT
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/registry/:email=npm-requires-email@example.com
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/:username=exim-dev
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/:_password=YOUR_BASE64_PAT
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/:email=npm-requires-email@example.com
 
 # ====================================
 # Alternative: ใช้ vsts-npm-auth (แนะนำ)
