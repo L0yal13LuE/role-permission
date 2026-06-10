@@ -1,0 +1,14 @@
+{
+  "/api/user-service": {
+    "target": "https://localhost:7256",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  },
+  "/api/codex-service": {
+    "target": "http://localhost:5011",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}

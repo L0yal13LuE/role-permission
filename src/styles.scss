@@ -1,15 +1,18 @@
+@import '@exim/ui-kit/dist/css/design-tokens.css';
+
 /* ===================================================================
  * APEX Platform — Role & Permission Design System
- * Colors: White + Orange (Banking-grade, Clean, Professional)
- * Fonts: Sora (UI) + IBM Plex Mono (Data/Code)
+ * Colors: Exim Blue (#034EA1) + Navy sidebar
+ * Fonts: Anuphan (UI) + IBM Plex Mono (Data)
  * =================================================================== */
 
 :root {
-  --orange:        #F97316;
-  --orange-dk:     #EA580C;
-  --orange-bg:     #FFF7ED;
-  --orange-muted:  #FFEDD5;
-  --orange-border: #FED7AA;
+  /* Primary mapped to @exim/ui-kit eximBlue */
+  --orange:        #034EA1;
+  --orange-dk:     #023A7A;
+  --orange-bg:     #EBF2FC;
+  --orange-muted:  #DBEAFE;
+  --orange-border: #BFDBFE;
   --navy:          #0F172A;
   --slate-800:     #1E293B;
   --slate-700:     #334155;
@@ -41,7 +44,7 @@
 html { scroll-behavior: smooth; }
 
 body {
-  font-family: 'Sora', system-ui, sans-serif;
+  font-family: 'Anuphan', 'Sarabun', system-ui, sans-serif;
   background: var(--slate-50);
   color: var(--navy);
   min-height: 100vh;

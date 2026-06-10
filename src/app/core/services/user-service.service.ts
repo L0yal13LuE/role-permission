@@ -3,13 +3,14 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of, delay, throwError, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { MockDataService } from './mock-data.service';
+import { ApiModeService } from './api-mode.service';
 import {
   Application, Company, Permission, Role, User, Enrollment,
   CompanyApplication, CompanyApplicationMode, UserRole, DashboardStats,
   CreateApplicationRequest, CreateRoleRequest, CreatePermissionRequest,
   AssignPermissionsRequest, AssignRoleRequest, CreateUserRequest,
   CreateCompanyRequest, CreateEnrollmentRequest, ApproveEnrollmentResponse,
-  UpdateModeRequest, UpdateDefaultRoleRequest, PermissionCheck,
+  UpdateModeRequest, PermissionCheck,
 } from '../models';
 
 const MOCK_DELAY = 300;
@@ -79,10 +80,11 @@ function mapRolePermItem(p: ApiRolePermItem, appId: string): Permission {
 
 @Injectable({ providedIn: 'root' })
 export class UserServiceApi {
-  private http = inject(HttpClient);
-  private mock = inject(MockDataService);
-  private base = environment.apiBaseUrl;
-  useMock = environment.useMock;
+  private http    = inject(HttpClient);
+  private mock    = inject(MockDataService);
+  private apiMode = inject(ApiModeService);
+  private base    = environment.apiBaseUrl;
+  get useMock() { return this.apiMode.isMock(); }
 
   // ── Applications ────────────────────────────────────────────────
 
@@ -355,8 +357,8 @@ export class UserServiceApi {
     if (this.useMock) {
       const entry = this.mock.companyApplicationModes.find(m => m.company_id === companyId && m.application_id === appId);
       const defaultModes: CompanyApplicationMode[] = [
-        { mode: 'single_user', is_active: false, default_role_id: null },
-        { mode: 'multiple_user', is_active: false, default_role_id: null },
+        { mode: 'single_user', is_active: false },
+        { mode: 'multiple_user', is_active: false },
       ];
       return of(entry ? [...entry.modes] : defaultModes).pipe(delay(MOCK_DELAY));
     }
@@ -367,7 +369,7 @@ export class UserServiceApi {
     if (this.useMock) {
       let entry = this.mock.companyApplicationModes.find(m => m.company_id === companyId && m.application_id === appId);
       if (!entry) {
-        entry = { company_id: companyId, application_id: appId, modes: [{ mode: 'single_user', is_active: false, default_role_id: null }, { mode: 'multiple_user', is_active: false, default_role_id: null }] };
+        entry = { company_id: companyId, application_id: appId, modes: [{ mode: 'single_user', is_active: false }, { mode: 'multiple_user', is_active: false }] };
         this.mock.companyApplicationModes.push(entry);
       }
       const m = entry.modes.find(m => m.mode === mode);
@@ -375,16 +377,6 @@ export class UserServiceApi {
       return of({ ...m! }).pipe(delay(MOCK_DELAY));
     }
     return this.http.patch<CompanyApplicationMode>(`${this.base}/companies/${companyId}/applications/${appId}/modes/${mode}`, { isActive: req.is_active });
-  }
-
-  updateDefaultRole(companyId: string, appId: string, mode: string, req: UpdateDefaultRoleRequest): Observable<CompanyApplicationMode> {
-    if (this.useMock) {
-      const entry = this.mock.companyApplicationModes.find(m => m.company_id === companyId && m.application_id === appId);
-      const m = entry?.modes.find(m => m.mode === mode);
-      if (m) m.default_role_id = req.role_id;
-      return of({ ...m! }).pipe(delay(MOCK_DELAY));
-    }
-    return this.http.patch<CompanyApplicationMode>(`${this.base}/companies/${companyId}/applications/${appId}/modes/${mode}/default-role`, { roleId: req.role_id });
   }
 
   // ── Users ────────────────────────────────────────────────────────

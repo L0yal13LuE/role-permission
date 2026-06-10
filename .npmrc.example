@@ -1,0 +1,47 @@
+# ====================================
+# Azure Artifacts Registry Configuration
+# ====================================
+# คำแนะนำ: Copy ไฟล์นี้เป็น .npmrc และแทนที่ YOUR_BASE64_PAT ด้วย token ของคุณ
+
+# Azure Artifacts registry for @exim packages
+@exim:registry=https://pkgs.dev.azure.com/eximth/_packaging/eximth/npm/registry/
+always-auth=true
+
+# Use public npm registry for all other packages
+registry=https://registry.npmjs.org/
+
+# ====================================
+# Azure Artifacts Authentication
+# ====================================
+# ⚠️ สำคัญ! คุณต้องแทนที่ YOUR_BASE64_PAT ด้วย Personal Access Token ของคุณ
+#
+# วิธีสร้าง PAT:
+# 1. ไปที่ Azure DevOps > User Settings > Personal Access Tokens
+# 2. สร้าง token ใหม่ด้วย scope: Packaging (Read, Write, & Manage)
+# 3. Copy token ที่ได้
+# 4. Encode เป็น Base64 ด้วยคำสั่ง PowerShell:
+#    [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("YOUR_PAT_TOKEN"))
+# 5. แทนที่ YOUR_BASE64_PAT ด้านล่างด้วย Base64 string ที่ได้
+
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/registry/:username=exim-dev
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/registry/:_password=YOUR_BASE64_PAT
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/registry/:email=npm-requires-email@example.com
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/:username=exim-dev
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/:_password=YOUR_BASE64_PAT
+//pkgs.dev.azure.com/eximth/_packaging/eximth/npm/:email=npm-requires-email@example.com
+
+# ====================================
+# Alternative: ใช้ vsts-npm-auth (แนะนำ)
+# ====================================
+# แทนที่จะแก้ไขไฟล์นี้ด้วยตนเอง คุณสามารถใช้:
+#
+# 1. ติดตั้ง vsts-npm-auth:
+#    npm install -g vsts-npm-auth
+#
+# 2. Copy ไฟล์นี้เป็น .npmrc:
+#    Copy-Item .npmrc.example .npmrc
+#
+# 3. Run authentication:
+#    vsts-npm-auth -config .npmrc
+#
+# vsts-npm-auth จะอัปเดต .npmrc ให้อัตโนมัติ

@@ -11,6 +11,9 @@
 npm-debug.log
 yarn-error.log
 
+# npm auth — contains Azure Artifacts PAT, keep local only (copy from .npmrc.example)
+.npmrc
+
 # IDEs and editors
 .idea/
 .project

@@ -94,15 +94,15 @@ export class MockDataService {
     {
       company_id: 'co001', application_id: 'app002',
       modes: [
-        { mode: 'single_user', is_active: true, default_role_id: 'role03' },
-        { mode: 'multiple_user', is_active: true, default_role_id: null },
+        { mode: 'single_user', is_active: true },
+        { mode: 'multiple_user', is_active: true },
       ],
     },
     {
       company_id: 'co002', application_id: 'app002',
       modes: [
-        { mode: 'single_user', is_active: true, default_role_id: 'role01' },
-        { mode: 'multiple_user', is_active: false, default_role_id: null },
+        { mode: 'single_user', is_active: true },
+        { mode: 'multiple_user', is_active: false },
       ],
     },
   ];

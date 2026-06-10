@@ -95,14 +95,12 @@ export interface CompanyApplication {
   subscribed_at: string;
 }
 
-/* ── Company Application Mode ── */
+/* ── Company Application Mode (legacy — used by user-service.service.ts / mock-data.service.ts) ── */
 export interface CompanyApplicationMode {
   mode: 'single_user' | 'multiple_user';
   is_active: boolean;
-  default_role_id: string | null;
 }
 export interface UpdateModeRequest { is_active: boolean; }
-export interface UpdateDefaultRoleRequest { role_id: string; }
 
 /* ── Enrollment ── */
 export interface Enrollment {
