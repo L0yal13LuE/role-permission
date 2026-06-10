@@ -25,6 +25,11 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Configure Azure Artifacts auth
+        run: |
+          cp .npmrc.example .npmrc
+          sed -i "s|YOUR_BASE64_PAT|${{ secrets.AZURE_NPM_TOKEN }}|g" .npmrc
+
       - name: Install dependencies
         run: npm ci
 
