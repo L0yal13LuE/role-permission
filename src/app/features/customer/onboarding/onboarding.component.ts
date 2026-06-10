@@ -5,13 +5,21 @@ import { Router } from '@angular/router';
 import { ApiModeService } from '../../../core/services/api-mode.service';
 import { DemoContextService } from '../../../core/services/demo-context.service';
 import { DemoDataService, ApiApp } from '../../../core/services/demo-data.service';
-import { forkJoin, of, Observable } from 'rxjs';
+import { forkJoin, of, throwError, Observable } from 'rxjs';
+import { catchError, concatMap } from 'rxjs/operators';
 
 type ApprovalType = string; // mode code, e.g. 'SingleUser' / 'MultipleUser'
 interface Svc     { id: string; apiId: string; icon: string; name: string; code: string; }
 interface OBMember { id: string; name: string; initials: string; email: string; color: string; roles: Record<string, string>; }
 
 const ICON_MAP: Record<string, string> = { FX: '💱', TBP: '🏦', ECI: '🛡️' };
+
+// Demo shortcut: instead of routing an invite request to the employee side, the
+// onboarding flow assigns a fixed requester user a baseline shell role on submit,
+// then (simulating employee approval) swaps it to the requester shell role.
+const DEMO_SHELL_USER_ID          = 'bf590257-a19f-4fa7-9b62-4c83cbf9a753';
+const DEMO_SHELL_NORMAL_ROLE_ID    = '4299129b-2928-4247-827d-47eb8063a2b6'; // Shell-Normal
+const DEMO_SHELL_REQUESTER_ROLE_ID = 'f48078c2-8e55-4522-9666-12c9c3627cb1'; // Shell-Requester
 
 const MOCK_SERVICES: Svc[] = [
   { id: 'fx',  apiId: '', icon: '💱', name: 'FX Forward Contract', code: 'FX'  },
@@ -46,12 +54,14 @@ const MOCK_SERVICES: Svc[] = [
 
     @if (done()) {
       <div class="card" style="text-align:center;padding:48px 24px">
-        <div style="font-size:48px;margin-bottom:16px">🎉</div>
-        <div style="font-size:20px;font-weight:800;color:#0F172A;margin-bottom:8px">Onboarding สำเร็จ!</div>
+        <div style="font-size:48px;margin-bottom:16px">✅</div>
+        <div style="font-size:20px;font-weight:800;color:#0F172A;margin-bottom:8px">Employee อนุมัติคำขอแล้ว</div>
         <div style="font-size:13px;color:#64748B;margin-bottom:24px">
-          ลงทะเบียน {{ selectedSvcs().length }} services เรียบร้อยแล้ว
+          บัญชีของคุณได้รับสิทธิ์ใช้งานแล้ว
         </div>
-        <button class="btn btn-primary" (click)="router.navigate(['/customer/dashboard'])">ไปยัง Dashboard →</button>
+        <button class="btn btn-primary" [disabled]="swapping()" (click)="goToDashboard()">
+          {{ swapping() ? '⏳ กำลังกำหนดสิทธิ์...' : 'ไปยัง Dashboard →' }}
+        </button>
       </div>
     } @else {
 
@@ -233,6 +243,7 @@ export class OnboardingComponent implements OnInit {
   loadingModes     = signal(false);
   loadingRolePool  = signal(false);
   submitting       = signal(false);
+  swapping         = signal(false);
   apiError         = signal<string | null>(null);
   selectedSvcs     = signal<string[]>([]);
   approvalTypes    = signal<Record<string, ApprovalType>>({});
@@ -357,6 +368,39 @@ export class OnboardingComponent implements OnInit {
     this.obMembers.update(list => list.filter(m => m.id !== id));
   }
 
+  /**
+   * Demo: simulate the post-approval elevation. Swap the fixed requester user's
+   * shell role from Shell-Normal → Shell-Requester, then go to the dashboard.
+   * No atomic swap endpoint exists, so this is remove-then-assign (idempotent:
+   * 404 on remove and 409 on assign are tolerated). On hard failure we stay put
+   * and leave the button enabled for retry.
+   */
+  goToDashboard() {
+    if (!this.apiMode.isReal()) {
+      this.router.navigate(['/customer/dashboard']);
+      return;
+    }
+
+    this.swapping.set(true);
+    this.apiError.set(null);
+
+    this.dataApi.removeShellRole(DEMO_SHELL_USER_ID, DEMO_SHELL_NORMAL_ROLE_ID).pipe(
+      catchError(err => err?.status === 404 ? of(undefined as void) : throwError(() => err)),
+      concatMap(() => this.dataApi.assignShellRole(DEMO_SHELL_USER_ID, DEMO_SHELL_REQUESTER_ROLE_ID).pipe(
+        catchError(err => err?.status === 409 ? of(undefined as void) : throwError(() => err)),
+      )),
+    ).subscribe({
+      next: () => {
+        this.swapping.set(false);
+        this.router.navigate(['/customer/dashboard']);
+      },
+      error: err => {
+        this.swapping.set(false);
+        this.apiError.set(`Role swap error: ${err?.status}`);
+      },
+    });
+  }
+
   submit() {
     if (!this.apiMode.isReal()) {
       this.done.set(true);
@@ -378,7 +422,13 @@ export class OnboardingComponent implements OnInit {
       return apiId ? this.dataApi.subscribeToApp(companyId, apiId) : of(undefined as void);
     });
 
-    forkJoin(subscribeCalls).subscribe({
+    // Demo shortcut: instead of routing an invite request to the employee side,
+    // grant the fixed shell role to the fixed requester user. 409 = already assigned → ignore.
+    const grantShell = this.dataApi.assignShellRole(DEMO_SHELL_USER_ID, DEMO_SHELL_NORMAL_ROLE_ID).pipe(
+      catchError(err => err?.status === 409 ? of(undefined as void) : throwError(() => err)),
+    );
+
+    forkJoin([...subscribeCalls, grantShell]).subscribe({
       next: () => {
         this.submitting.set(false);
         this.done.set(true);
