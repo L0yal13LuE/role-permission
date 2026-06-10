@@ -26,9 +26,20 @@ jobs:
           cache: 'npm'
 
       - name: Configure Azure Artifacts auth
+        env:
+          AZURE_NPM_TOKEN: ${{ secrets.AZURE_NPM_TOKEN }}
         run: |
+          if [ -z "$AZURE_NPM_TOKEN" ]; then
+            echo "::error::AZURE_NPM_TOKEN secret is empty or not set"
+            exit 1
+          fi
           cp .npmrc.example .npmrc
-          sed -i "s|YOUR_BASE64_PAT|${{ secrets.AZURE_NPM_TOKEN }}|g" .npmrc
+          sed -i "s|YOUR_BASE64_PAT|${AZURE_NPM_TOKEN}|g" .npmrc
+          if grep -q "YOUR_BASE64_PAT" .npmrc; then
+            echo "::error::token substitution failed — placeholder still present"
+            exit 1
+          fi
+          echo "✅ npm auth configured (token length: ${#AZURE_NPM_TOKEN})"
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
