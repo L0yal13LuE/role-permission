@@ -31,7 +31,7 @@ jobs:
           sed -i "s|YOUR_BASE64_PAT|${{ secrets.AZURE_NPM_TOKEN }}|g" .npmrc
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build (production)
         run: npm run build -- --configuration=production
